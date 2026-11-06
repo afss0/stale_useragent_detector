@@ -1,0 +1,24 @@
+{
+ "generated_at": "2026-11-05T00:00:00+00:00",
+ "timelines": {
+  "Chrome": [
+   {"version": 100, "date": "2020-01-01"},
+   {"version": 140, "date": "2026-09-01"}
+  ],
+  "Firefox": [
+   {"version": 140, "date": "2024-01-01"},
+   {"version": 141, "date": "2026-09-01"}
+  ],
+  "Safari-minors": [
+   {"version": "26.5", "date": "2025-01-01"},
+   {"version": "26.6", "date": "2026-09-01"}
+  ],
+  "Safari": [
+   {"version": 26, "date": "2026-01-01"}
+  ]
+ },
+ "current": {
+  "firefox_esr": "140.8.0",
+  "firefox_esr_lines": {"140": "140.8.0"}
+ }
+}
