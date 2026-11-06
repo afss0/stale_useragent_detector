@@ -561,7 +561,8 @@ def nginx_main(a):
     cmonths = a.client_months if a.client_months is not None else a.max_age_months
     timelines = load_timelines(
         a.cache, refresh=a.refresh, offline=a.offline, from_build=a.from_build,
-        max_age_days=a.max_data_age_days, quiet=False)
+        max_age_days=a.max_data_age_days, quiet=False,
+        require_sources=a.require_sources)
     brel, crel = timelines.browser, timelines.client
     if a.dump_build:
         dump_build(timelines, a.dump_build)
@@ -672,6 +673,14 @@ class DataUnavailable(RuntimeError):
         super().__init__(f"no release timeline for {family}")
 
 
+class SourcesMissing(RuntimeError):
+    """Raised when a required source or built timeline is absent or empty."""
+
+    def __init__(self, missing):
+        self.missing = sorted(set(missing))
+        super().__init__("missing or empty: " + ", ".join(self.missing))
+
+
 @dataclass(frozen=True)
 class Verdict:
     stale: bool
@@ -700,19 +709,48 @@ def dump_build(timelines, path):
         json.dump(timelines.client, fh, indent=1, ensure_ascii=False)
 
 
+def _present(path):
+    try:
+        return os.path.getsize(path) > 10
+    except OSError:
+        return False
+
+
+def _missing_sources(cache_dir):
+    return [name for name in SOURCES if not _present(os.path.join(cache_dir, name))]
+
+
+def _missing_built(browser, client):
+    missing = []
+    timelines = browser.get("timelines") or {}
+    for name in ("Chrome", "Firefox", "Safari", "Safari-minors"):
+        if not timelines.get(name):
+            missing.append(name)
+    clients = client.get("clients") or {}
+    for name in ("curl", "python-requests", "PowerShell"):
+        if not ((clients.get(name) or {}).get("releases")):
+            missing.append(name)
+    return missing
+
+
 def load_timelines(cache_dir, *, refresh=False, offline=False, from_build=None,
-                   max_age_days=7.0, quiet=False):
+                   max_age_days=7.0, quiet=False, require_sources=False):
     """Load the browser and client release tables.
 
     from_build bypasses the network entirely. Otherwise the source cache is
     reused until it is older than max_age_days; a failed refresh keeps the
-    existing cache and only warns.
+    existing cache and only warns. require_sources turns a partial cache or a
+    partial build into SourcesMissing instead of a permissive policy.
     """
     if from_build:
         browser = _read_json(os.path.join(from_build, "browser-releases.json"))
         client = _read_json(os.path.join(from_build, "client-releases.json"))
         if browser is None or client is None:
             raise DataUnavailable("build")
+        if require_sources:
+            missing = _missing_built(browser, client)
+            if missing:
+                raise SourcesMissing(missing)
         return Timelines(browser, client, browser.get("generated_at"))
 
     marker = os.path.join(cache_dir, ".last_fetch")
@@ -732,6 +770,10 @@ def load_timelines(cache_dir, *, refresh=False, offline=False, from_build=None,
 
     browser = build_browser_releases(cache_dir)
     client = build_client_releases(cache_dir)
+    if require_sources:
+        missing = _missing_sources(cache_dir) + _missing_built(browser, client)
+        if missing:
+            raise SourcesMissing(missing)
     return Timelines(browser, client, browser.get("generated_at"))
 
 
@@ -962,13 +1004,17 @@ def detector_main(a):
     try:
         timelines = load_timelines(
             a.cache, refresh=a.refresh, offline=a.offline, from_build=a.from_build,
-            max_age_days=a.max_data_age_days, quiet=a.json)
+            max_age_days=a.max_data_age_days, quiet=a.json,
+            require_sources=a.require_sources)
         if a.dump_build:
             dump_build(timelines, a.dump_build)
         verdict = is_stale(
             ua, timelines, as_of=as_of, max_age_months=a.max_age_months,
             browser_months=a.browser_months, client_months=a.client_months,
             allow_ua=a.allow_ua, esr_lines=a.esr_lines)
+    except SourcesMissing as exc:
+        print(f"error: incomplete release data: {exc}", file=sys.stderr)
+        return 3
     except DataUnavailable as exc:
         if not a.allow_undated:
             print(f"error: no release timeline for {exc.family}", file=sys.stderr)
@@ -1008,6 +1054,32 @@ def detector_main(a):
     return 1 if (a.exit_code and selected) else 0
 
 
+def build_only_main(a):
+    """Fetch/build the release tables into a directory and exit; no UA needed."""
+    if a.from_build:
+        print("error: --build-only cannot be combined with --from-build", file=sys.stderr)
+        return 2
+    try:
+        timelines = load_timelines(
+            a.cache, refresh=a.refresh, offline=a.offline, from_build=None,
+            max_age_days=a.max_data_age_days, quiet=False,
+            require_sources=a.require_sources)
+    except SourcesMissing as exc:
+        print(f"error: incomplete release data: {exc}", file=sys.stderr)
+        return 3
+    try:
+        dump_build(timelines, a.build_only)
+    except OSError as exc:
+        print(f"error: could not write {a.build_only}: {exc}", file=sys.stderr)
+        return 1
+    timelines_b = timelines.browser.get("timelines") or {}
+    clients = timelines.client.get("clients") or {}
+    print(f"wrote {a.build_only}/browser-releases.json and client-releases.json")
+    print(f"  generated_at={timelines.generated_at}")
+    print(f"  browser timelines={len(timelines_b)} clients={len(clients)} sources={len(SOURCES)}")
+    return 0
+
+
 def build_parser():
     ap = argparse.ArgumentParser(
         description="Decide whether a User-Agent is stale, or generate an optional nginx policy.")
@@ -1030,6 +1102,10 @@ def build_parser():
     ap.add_argument("--offline", action="store_true", help="never fetch")
     ap.add_argument("--from-build", help="read browser/client release JSONs from this directory")
     ap.add_argument("--dump-build", help="write the fetched release tables here")
+    ap.add_argument("--build-only", metavar="DIR",
+                    help="fetch/build the release tables into DIR and exit")
+    ap.add_argument("--require-sources", action="store_true",
+                    help="fail with exit 3 if a source or built timeline is missing or empty")
     ap.add_argument("--max-data-age-days", type=float, default=7.0,
                     help="refresh when the cache is older than this")
 
@@ -1055,6 +1131,10 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     nginx_mode = any([args.out, args.snippet, args.manifest, args.stdout, args.dry_run])
+    if args.build_only:
+        if args.ua is not None or nginx_mode:
+            parser.error("--build-only cannot be combined with a UA or --nginx-* flags")
+        return build_only_main(args)
     if nginx_mode:
         if args.ua is not None:
             parser.error("a UA argument cannot be combined with --nginx-* flags")

@@ -182,6 +182,39 @@ class CliTest(unittest.TestCase):
         self.assertEqual(p.returncode, 0)
         self.assertEqual(p.stdout, "false\n")
 
+    def test_require_sources_offline_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = subprocess.run(
+                [sys.executable, str(SCRIPT), "--offline", "--cache", tmp, "--require-sources",
+                 "--as-of", "2026-11-05", CHROME.format(v=140)],
+                capture_output=True, text=True, timeout=30)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("incomplete release data", p.stderr)
+
+    def test_require_sources_from_build(self):
+        p = self.run_cli("--require-sources", CHROME.format(v=140))
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(p.stdout, "false\n")
+
+    def test_require_sources_incomplete_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "browser-releases.json").write_text('{"timelines": {}, "current": {}}')
+            Path(tmp, "client-releases.json").write_text('{"clients": {}}')
+            p = subprocess.run(
+                [sys.executable, str(SCRIPT), "--from-build", tmp, "--require-sources",
+                 "--as-of", "2026-11-05", CHROME.format(v=140)],
+                capture_output=True, text=True, timeout=30)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("incomplete release data", p.stderr)
+
+    def test_build_only_rejects_ua(self):
+        p = self.run_cli("--build-only", "/tmp/never-written", CHROME.format(v=140))
+        self.assertEqual(p.returncode, 2)
+
+    def test_build_only_rejects_from_build(self):
+        p = self.run_cli("--build-only", "/tmp/never-written", "--from-build", str(FIXTURES))
+        self.assertEqual(p.returncode, 2)
+
     def test_nginx_mode_rejects_positional_ua(self):
         p = self.run_cli("--nginx-stdout", CHROME.format(v=140))
         self.assertEqual(p.returncode, 2)

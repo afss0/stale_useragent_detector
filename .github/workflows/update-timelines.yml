@@ -1,0 +1,48 @@
+name: Update release timelines
+
+# Weekly refresh of data/browser-releases.json and data/client-releases.json.
+# The job fails closed: --require-sources refuses a partial fetch, so a broken
+# or renamed source can never replace good data with a more permissive policy.
+# If branch protection blocks github-actions[bot] on main, push to a data
+# branch instead or allow the bot to bypass the rule.
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"   # Mondays 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-timelines
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Fetch and build timelines
+        run: python stale_useragent_detector.py --build-only data --require-sources
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "timelines unchanged"
+          else
+            git commit -m "chore(data): refresh release timelines"
+            git push
+          fi

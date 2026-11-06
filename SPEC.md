@@ -79,6 +79,8 @@ Detector options:
 --offline                   never fetch; use cache/build or fail
 --from-build DIR            read browser-releases.json and client-releases.json
 --dump-build DIR            write the fetched tables there
+--build-only DIR            fetch/build the release tables into DIR and exit
+--require-sources           exit 3 if any source or required timeline is missing
 --max-data-age-days N       refresh when the cache is older than N days (default: 7)
 --version                   print the version and exit
 ```
@@ -98,7 +100,7 @@ Exit codes:
 | Code | Meaning |
 |---|---|
 | 0 | decision made (stale or not) |
-| 1 | predicate true, only with `--exit-code` |
+| 1 | predicate true, only with `--exit-code`; or a build-only write failure |
 | 2 | usage error, invalid regex, self-test failure |
 | 3 | data unavailable for a datable family |
 | 4 | no UA on stdin |
@@ -160,6 +162,20 @@ The fetch and build functions are reused unchanged.
 - The detector never writes into the cache during a read-only decision except
   through the documented fetch/rebuild step.
 
+### 4.1 Pinned tables and weekly refresh
+
+`--build-only DIR` fetches and builds the tables, writes
+`browser-releases.json` and `client-releases.json` into `DIR`, and exits without
+needing a UA. `--require-sources` makes a missing source file or an empty
+required timeline fatal (exit 3); without it, the builder keeps its historical
+permissive behavior of skipping what it cannot parse.
+
+The repository's `.github/workflows/update-timelines.yml` runs
+`--build-only data --require-sources` weekly and commits `data/` when it changes.
+Consumers use `--from-build data` to run offline against the pinned tables. The
+job fails closed, so a broken source can never replace good data with a more
+permissive policy.
+
 ## 5. Nginx mode (optional)
 
 Any `--nginx-*` flag selects nginx mode. A positional UA is a usage error in
@@ -219,6 +235,8 @@ inputs and `--as-of`. Parity is an acceptance test, not an aspiration.
    (manual check; never against production).
 8. A single decision after loading the timelines takes under 10 ms on the
    reference machine; a cold cache load takes under 100 ms.
+9. `--build-only DIR --require-sources` with a complete fetch writes both JSONs
+   and exits 0; a missing source or required timeline exits 3.
 
 Tests use `unittest` and fixtures; the suite must pass without network access:
 

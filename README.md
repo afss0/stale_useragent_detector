@@ -4,7 +4,7 @@ A standalone, standard-library Python tool that answers one question about a
 User-Agent string: is this client stale?
 
 Status: implemented 2026-11-05. `SPEC.md` is the contract; the implementation is
-`stale_useragent_detector.py`. 27 unit tests green, including byte-identical
+`stale_useragent_detector.py`. 32 unit tests green, including byte-identical
 parity of the nginx `$ua_stale` map against a reference deployment checkout.
 
 ## Detector
@@ -38,6 +38,25 @@ Modes are exclusive: any `--nginx-*` flag selects generation, and a positional
 UA is rejected there. `--nginx-stdout` and `--nginx-dry-run` preview without
 writing.
 
+## Data refresh
+
+The weekly GitHub Actions workflow (`.github/workflows/update-timelines.yml`)
+refreshes the pinned tables and commits them when they change:
+
+```bash
+python stale_useragent_detector.py --build-only data --require-sources
+```
+
+`--build-only DIR` fetches, builds, writes `browser-releases.json` and
+`client-releases.json`, and exits without needing a UA. `--require-sources`
+makes a missing source or an empty required timeline fatal (exit 3), so the
+workflow never replaces good data with a more permissive partial build. Use the
+pinned tables without network access:
+
+```bash
+./stale_useragent_detector.py --from-build data "$UA"
+```
+
 ## Tests
 
 ```bash
@@ -51,6 +70,8 @@ TIMELINES_REPO=/path/to/reference python3 -m unittest discover -s tests -v
 - `SPEC.md` — the contract, decision rules, flags, acceptance criteria.
 - `stale_useragent_detector.py` — the tool.
 - `tests/` — unit and CLI tests, plus fixture timelines.
+- `data/` — pinned release tables, refreshed weekly by Actions.
+- `.github/workflows/update-timelines.yml` — the weekly refresh.
 - `examples/` — generated nginx policy and snippet.
 - `test-against-logs*.py` — corpus checks against real nginx logs.
 - `LICENSE` — MIT.
