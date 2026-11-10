@@ -3,10 +3,6 @@
 A standalone, standard-library Python tool that answers one question about a
 User-Agent string: is this client stale?
 
-Status: implemented 2026-11-05. `SPEC.md` is the contract; the implementation is
-`stale_useragent_detector.py`. 32 unit tests green, including byte-identical
-parity of the nginx `$ua_stale` map against a reference deployment checkout.
-
 ## Detector
 
 ```bash
