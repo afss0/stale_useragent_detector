@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-16T12:45:07.750080+00:00",
+ "generated_at": "2026-11-23T14:38:47.271390+00:00",
  "clients": {
   "curl": {
    "ua_token": "curl/",
@@ -1357,7 +1357,7 @@
   "node": {
    "ua_token": "node",
    "note": "the UA is literally 'node', no version",
-   "releases_count": 882
+   "releases_count": 883
   },
   "okhttp": {
    "ua_token": "okhttp/",

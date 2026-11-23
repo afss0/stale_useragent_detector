@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-16T12:45:07.739244+00:00",
+ "generated_at": "2026-11-23T14:38:47.258046+00:00",
  "timelines": {
   "Chrome": [
    {
@@ -601,6 +601,10 @@
    {
     "version": 157,
     "date": "2026-11-03"
+   },
+   {
+    "version": 158,
+    "date": "2026-11-17"
    }
   ],
   "Chrome-iOS": [
@@ -1700,7 +1704,7 @@
    },
    {
     "version": "27.3",
-    "date": "2026-11-03"
+    "date": "2026-11-16"
    }
   ],
   "Android": [
@@ -1843,9 +1847,9 @@
   ]
  },
  "current": {
-  "chrome_stable": "158.0.8127.37",
+  "chrome_stable": "159.0.8154.13",
   "chrome_ios": "158.0.8127.35",
-  "firefox": "160.0",
+  "firefox": "160.0.1",
   "firefox_esr": "153.7.0esr",
   "firefox_esr_lines": {
    "153": "153.7.0esr",
